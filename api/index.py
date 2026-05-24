@@ -43,7 +43,7 @@ except ImportError as e:
     async def fetch_extension_details(extension_id):
         return {"error": "Extension scraper not available"}
 
-app = FastAPI(title="Fortect API + Extension Scraper + Email Leak Check")
+app = FastAPI(title="securelint API + Extension Scraper + Email Leak Check")
 
 # ============ CONFIGURATION ============
 
@@ -84,13 +84,13 @@ async def enhanced_check(url: str = Query(...)):
 async def malware_enhanced_check(url: str = Query(...)):
     overall_start = time.time()
     google_task = asyncio.create_task(check_google_safe_browsing(url))
-    fortect_task = asyncio.create_task(check_malware(url))
-    google_result, fortect_result = await asyncio.gather(google_task, fortect_task)
+    securelint_task = asyncio.create_task(check_malware(url))
+    google_result, securelint_result = await asyncio.gather(google_task, securelint_task)
     
     score = google_result.get("score", 50)
-    if fortect_result.get("type") == "clean":
+    if securelint_result.get("type") == "clean":
         score += 5
-    elif fortect_result.get("type") in ["malware", "phishing"]:
+    elif securelint_result.get("type") in ["malware", "phishing"]:
         score -= 25
     score = max(0, min(100, score))
     
@@ -112,9 +112,9 @@ async def malware_enhanced_check(url: str = Query(...)):
         "action": action,
         "severity": severity,
         "google_time_ms": google_result.get("time_ms", 0),
-        "fortect_time_ms": fortect_result.get("time_ms", 0),
+        "securelint_time_ms": securelint_result.get("time_ms", 0),
         "google": google_result,
-        "fortect": fortect_result
+        "securelint": securelint_result
     })
 
 @app.get("/super_fast/")
