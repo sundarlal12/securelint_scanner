@@ -17,3 +17,4 @@ urllib3==2.1.0
 soupsieve==2.5
 aiofiles==23.2.1
 python-whois==0.8.0
+pycryptodome==3.20.0
