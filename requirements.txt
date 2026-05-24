@@ -16,3 +16,4 @@ charset-normalizer==3.3.2
 urllib3==2.1.0
 soupsieve==2.5
 aiofiles==23.2.1
+python-whois==0.8.0
