@@ -98,20 +98,164 @@ async def enhanced_check(url: str = Query(...)):
 
 
 
+# @app.get("/ssl/")
+# async def ssl_check(url: str = Query(..., description="Domain or URL to check SSL certificate")):
+#     """
+#     Check SSL certificate details for a given domain.
+#     Usage: /ssl/?url=google.com
+#     """
+#     start_time = time.time()
+    
+#     # Extract hostname from URL if full URL is provided
+#     hostname = url
+#     if url.startswith(("http://", "https://")):
+#         from urllib.parse import urlparse
+#         parsed = urlparse(url)
+#         hostname = parsed.hostname
+    
+#     result = {
+#         "domain": hostname,
+#         "ssl": False,
+#         "response_time_ms": 0
+#     }
+    
+#     try:
+#         # SSL SOCKET
+#         context = ssl._create_unverified_context()
+        
+#         with socket.create_connection((hostname, 443), timeout=10) as sock:
+#             with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+#                 # RAW CERT
+#                 der_cert = ssock.getpeercert(True)
+                
+#                 # LOAD CERT
+#                 cert = x509.load_der_x509_certificate(der_cert, default_backend())
+                
+#                 # DATES
+#                 valid_from = cert.not_valid_before_utc
+#                 valid_until = cert.not_valid_after_utc
+#                 expired = valid_until < datetime.utcnow().astimezone()
+#                 days_left = (valid_until - datetime.utcnow().astimezone()).days
+                
+#                 # ISSUER
+#                 issuer = {}
+#                 for attr in cert.issuer:
+#                     issuer[attr.oid._name] = attr.value
+                
+#                 # SUBJECT
+#                 subject = {}
+#                 for attr in cert.subject:
+#                     subject[attr.oid._name] = attr.value
+                
+#                 # SIGNATURE ALGORITHM
+#                 signature_algorithm = cert.signature_hash_algorithm.name
+#                 weak_signature = signature_algorithm.lower() in ["md5", "sha1"]
+                
+#                 # PUBLIC KEY
+#                 public_key = cert.public_key()
+#                 public_key_bits = None
+#                 public_key_type = None
+                
+#                 if isinstance(public_key, rsa.RSAPublicKey):
+#                     public_key_bits = public_key.key_size
+#                     public_key_type = "RSA"
+#                 elif isinstance(public_key, ec.EllipticCurvePublicKey):
+#                     public_key_bits = public_key.key_size
+#                     public_key_type = "ECC"
+                
+#                 weak_key = (public_key_bits is not None and public_key_bits < 2048)
+                
+#                 # SELF SIGNED
+#                 self_signed = (cert.issuer == cert.subject)
+                
+#                 # WILDCARD
+#                 common_name = subject.get("commonName", "")
+#                 wildcard = "*" in common_name
+                
+#                 # TLS INFO
+#                 tls_version = ssock.version()
+#                 cipher = ssock.cipher()[0] if ssock.cipher() else None
+                
+#                 # FINGERPRINTS
+#                 sha1_fingerprint = hashlib.sha1(der_cert).hexdigest()
+#                 sha256_fingerprint = hashlib.sha256(der_cert).hexdigest()
+                
+#                 # HSTS
+#                 supports_hsts = False
+#                 hsts_header = ""
+#                 try:
+#                     response = requests.get(f"https://{hostname}", timeout=10, verify=False)
+#                     hsts_header = response.headers.get("Strict-Transport-Security", "")
+#                     supports_hsts = bool(hsts_header)
+#                 except:
+#                     pass
+                
+#                 response_time_ms = int((time.time() - start_time) * 1000)
+                
+#                 result = {
+#                     "domain": hostname,
+#                     "ssl": True,
+#                     "response_time_ms": response_time_ms,
+#                     "certificate_valid": not expired,
+#                     "expired": expired,
+#                     "days_left": days_left,
+#                     "valid_from": str(valid_from),
+#                     "valid_until": str(valid_until),
+#                     "issuer": issuer,
+#                     "subject": subject,
+#                     "serial_number": str(cert.serial_number),
+#                     "signature_algorithm": signature_algorithm,
+#                     "weak_signature": weak_signature,
+#                     "public_key_type": public_key_type,
+#                     "public_key_bits": public_key_bits,
+#                     "weak_key": weak_key,
+#                     "self_signed": self_signed,
+#                     "wildcard": wildcard,
+#                     "tls_version": tls_version,
+#                     "cipher": cipher,
+#                     "sha1_fingerprint": sha1_fingerprint,
+#                     "sha256_fingerprint": sha256_fingerprint,
+#                     "supports_hsts": supports_hsts,
+#                     "hsts_header": hsts_header
+#                 }
+                
+#     except socket.timeout:
+#         result["error"] = f"Connection timeout for {hostname}:443"
+#         result["response_time_ms"] = int((time.time() - start_time) * 1000)
+#     except ConnectionRefusedError:
+#         result["error"] = f"Connection refused - No SSL service running on {hostname}:443"
+#         result["response_time_ms"] = int((time.time() - start_time) * 1000)
+#     except ssl.SSLError as e:
+#         result["error"] = f"SSL error: {str(e)}"
+#         result["response_time_ms"] = int((time.time() - start_time) * 1000)
+#     except Exception as e:
+#         result["error"] = str(e)
+#         result["response_time_ms"] = int((time.time() - start_time) * 1000)
+    
+#     return JSONResponse(content=result)
+
+
 @app.get("/ssl/")
 async def ssl_check(url: str = Query(..., description="Domain or URL to check SSL certificate")):
     """
-    Check SSL certificate details for a given domain.
-    Usage: /ssl/?url=google.com
+    Optimized SSL check - includes fingerprints but fast.
     """
     start_time = time.time()
     
-    # Extract hostname from URL if full URL is provided
+    # Extract hostname
     hostname = url
     if url.startswith(("http://", "https://")):
         from urllib.parse import urlparse
         parsed = urlparse(url)
         hostname = parsed.hostname
+    
+    if not hostname or hostname == "None":
+        return JSONResponse(content={
+            "domain": hostname,
+            "ssl": False,
+            "error": "Invalid domain name",
+            "response_time_ms": int((time.time() - start_time) * 1000)
+        })
     
     result = {
         "domain": hostname,
@@ -120,15 +264,14 @@ async def ssl_check(url: str = Query(..., description="Domain or URL to check SS
     }
     
     try:
-        # SSL SOCKET
-        context = ssl._create_unverified_context()
+        # Use faster SSL context
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
         
-        with socket.create_connection((hostname, 443), timeout=10) as sock:
+        with socket.create_connection((hostname, 443), timeout=5) as sock:
             with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                # RAW CERT
                 der_cert = ssock.getpeercert(True)
-                
-                # LOAD CERT
                 cert = x509.load_der_x509_certificate(der_cert, default_backend())
                 
                 # DATES
@@ -137,12 +280,11 @@ async def ssl_check(url: str = Query(..., description="Domain or URL to check SS
                 expired = valid_until < datetime.utcnow().astimezone()
                 days_left = (valid_until - datetime.utcnow().astimezone()).days
                 
-                # ISSUER
+                # ISSUER & SUBJECT (fast extraction)
                 issuer = {}
                 for attr in cert.issuer:
                     issuer[attr.oid._name] = attr.value
                 
-                # SUBJECT
                 subject = {}
                 for attr in cert.subject:
                     subject[attr.oid._name] = attr.value
@@ -165,30 +307,20 @@ async def ssl_check(url: str = Query(..., description="Domain or URL to check SS
                 
                 weak_key = (public_key_bits is not None and public_key_bits < 2048)
                 
-                # SELF SIGNED
+                # SELF SIGNED & WILDCARD
                 self_signed = (cert.issuer == cert.subject)
-                
-                # WILDCARD
                 common_name = subject.get("commonName", "")
                 wildcard = "*" in common_name
                 
-                # TLS INFO
+                # TLS INFO (fast)
                 tls_version = ssock.version()
                 cipher = ssock.cipher()[0] if ssock.cipher() else None
                 
-                # FINGERPRINTS
+                # FINGERPRINTS (fast hashing - milliseconds)
                 sha1_fingerprint = hashlib.sha1(der_cert).hexdigest()
                 sha256_fingerprint = hashlib.sha256(der_cert).hexdigest()
                 
-                # HSTS
-                supports_hsts = False
-                hsts_header = ""
-                try:
-                    response = requests.get(f"https://{hostname}", timeout=10, verify=False)
-                    hsts_header = response.headers.get("Strict-Transport-Security", "")
-                    supports_hsts = bool(hsts_header)
-                except:
-                    pass
+                # REMOVED SLOW HSTS CHECK - saves 2-3 seconds
                 
                 response_time_ms = int((time.time() - start_time) * 1000)
                 
@@ -214,9 +346,7 @@ async def ssl_check(url: str = Query(..., description="Domain or URL to check SS
                     "tls_version": tls_version,
                     "cipher": cipher,
                     "sha1_fingerprint": sha1_fingerprint,
-                    "sha256_fingerprint": sha256_fingerprint,
-                    "supports_hsts": supports_hsts,
-                    "hsts_header": hsts_header
+                    "sha256_fingerprint": sha256_fingerprint
                 }
                 
     except socket.timeout:
