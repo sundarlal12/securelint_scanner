@@ -364,23 +364,107 @@ async def ssl_check(url: str = Query(..., description="Domain or URL to check SS
     
     return JSONResponse(content=result)
 
+# @app.get("/malware/enhanced/")
+# async def malware_enhanced_check(url: str = Query(...)):
+#     overall_start = time.time()
+#     google_task = asyncio.create_task(check_google_safe_browsing(url))
+#     securelint_task = asyncio.create_task(check_malware(url))
+#     google_result, securelint_result = await asyncio.gather(google_task, securelint_task)
+    
+#     score = google_result.get("score", 50)
+    
+#     # ONLY use cloud_detection data, ignore main securelint type
+#     cloud_detection_list = securelint_result.get("cloud_detection", [])
+#     if cloud_detection_list:
+#         for detection in cloud_detection_list:
+#             detection_type = detection.get("type", "").lower()
+#             detection_action = detection.get("action", "").lower()
+            
+#             # Score adjustments based on cloud detection type only
+#             if detection_type == "clean":
+#                 score += 5
+#             elif detection_type in ["malware", "phishing"]:
+#                 score -= 30
+#             elif detection_type == "suspicious":
+#                 score -= 15
+    
+#     score = max(0, min(100, score))
+    
+#     # Determine action based ONLY on cloud detection action
+#     action = None
+#     severity = "low"
+    
+#     if cloud_detection_list:
+#         for detection in cloud_detection_list:
+#             detection_action = detection.get("action", "").lower()
+#             if detection_action == "block":
+#                 action = "block"
+#                 severity = "critical" if score <= 30 else "high"
+#                 break
+#             elif detection_action == "warn" and action is None:
+#                 action = "warn"
+#                 severity = "medium"
+#             elif detection_action == "allow" and action is None:
+#                 action = "allow"
+#                 severity = "low"
+    
+#     # Fallback to score-based action if no cloud_detection action found
+#     if not action:
+#         if score <= 30:
+#             action, severity = "block", "critical"
+#         elif score <= 45:
+#             action, severity = "block", "high"
+#         elif score <= 55:
+#             action, severity = "warn", "medium"
+#         else:
+#             action, severity = "allow", "low"
+    
+#     total_time = int((time.time() - overall_start) * 1000)
+    
+#     return JSONResponse(content={
+#         "url": url,
+#         "total_time_ms": total_time,
+#         "score": score,
+#         "action": action,
+#         "severity": severity,
+#         "google_time_ms": google_result.get("time_ms", 0),
+#         "securelint_time_ms": securelint_result.get("time_ms", 0),
+#         "google": google_result,
+#         "securelint": securelint_result
+#     })
+
+
 @app.get("/malware/enhanced/")
 async def malware_enhanced_check(url: str = Query(...)):
     overall_start = time.time()
+    
+    # Ensure URL is properly formatted
+    if not url or url == "None":
+        return JSONResponse(content={"error": "Invalid URL"}, status_code=400)
+    
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    
     google_task = asyncio.create_task(check_google_safe_browsing(url))
     securelint_task = asyncio.create_task(check_malware(url))
     google_result, securelint_result = await asyncio.gather(google_task, securelint_task)
     
+    # Start with Google score
     score = google_result.get("score", 50)
+    google_true_count = google_result.get("true_count", 0)
     
-    # ONLY use cloud_detection data, ignore main securelint type
+    # Get cloud detection data
     cloud_detection_list = securelint_result.get("cloud_detection", [])
-    if cloud_detection_list:
+    
+    # IMPORTANT: Check if Google detected any threat
+    google_detected_threat = google_true_count > 0 or score <= 45
+    
+    # Process cloud detection but with Google priority
+    if cloud_detection_list and not google_detected_threat:
+        # Only apply cloud detection adjustments if Google says it's safe
         for detection in cloud_detection_list:
             detection_type = detection.get("type", "").lower()
-            detection_action = detection.get("action", "").lower()
             
-            # Score adjustments based on cloud detection type only
             if detection_type == "clean":
                 score += 5
             elif detection_type in ["malware", "phishing"]:
@@ -390,34 +474,45 @@ async def malware_enhanced_check(url: str = Query(...)):
     
     score = max(0, min(100, score))
     
-    # Determine action based ONLY on cloud detection action
+    # Determine action - GOOGLE TAKES PRIORITY for security
     action = None
     severity = "low"
     
-    if cloud_detection_list:
-        for detection in cloud_detection_list:
-            detection_action = detection.get("action", "").lower()
-            if detection_action == "block":
-                action = "block"
-                severity = "critical" if score <= 30 else "high"
-                break
-            elif detection_action == "warn" and action is None:
-                action = "warn"
-                severity = "medium"
-            elif detection_action == "allow" and action is None:
-                action = "allow"
-                severity = "low"
-    
-    # Fallback to score-based action if no cloud_detection action found
-    if not action:
+    # FIRST: Check if Google detected a threat (score <= 45 or true_count > 0)
+    if google_detected_threat or score <= 45:
+        # Google says it's unsafe - BLOCK regardless of cloud detection
         if score <= 30:
             action, severity = "block", "critical"
         elif score <= 45:
             action, severity = "block", "high"
-        elif score <= 55:
-            action, severity = "warn", "medium"
         else:
-            action, severity = "allow", "low"
+            action, severity = "block", "high"  # Default block for any Google detection
+    else:
+        # Google says it's safe, now check cloud detection
+        if cloud_detection_list:
+            for detection in cloud_detection_list:
+                detection_action = detection.get("action", "").lower()
+                if detection_action == "block":
+                    action = "block"
+                    severity = "critical" if score <= 30 else "high"
+                    break
+                elif detection_action == "warn" and action is None:
+                    action = "warn"
+                    severity = "medium"
+                elif detection_action == "allow" and action is None:
+                    action = "allow"
+                    severity = "low"
+        
+        # Fallback to score-based action if no cloud action
+        if not action:
+            if score <= 30:
+                action, severity = "block", "critical"
+            elif score <= 45:
+                action, severity = "block", "high"
+            elif score <= 55:
+                action, severity = "warn", "medium"
+            else:
+                action, severity = "allow", "low"
     
     total_time = int((time.time() - overall_start) * 1000)
     
@@ -430,9 +525,15 @@ async def malware_enhanced_check(url: str = Query(...)):
         "google_time_ms": google_result.get("time_ms", 0),
         "securelint_time_ms": securelint_result.get("time_ms", 0),
         "google": google_result,
-        "securelint": securelint_result
+        "securelint": securelint_result,
+        "decision_logic": {
+            "google_threat_detected": google_detected_threat,
+            "google_score": score,
+            "cloud_type": cloud_detection_list[0].get("type", "unknown") if cloud_detection_list else "none",
+            "cloud_action": cloud_detection_list[0].get("action", "unknown") if cloud_detection_list else "none",
+            "priority": "google_safe_browsing" if google_detected_threat else "cloud_detection"
+        }
     })
-
 
 @app.get("/super_fast/")
 async def super_fast_check(url: str = Query(...)):
