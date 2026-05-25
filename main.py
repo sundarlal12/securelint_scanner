@@ -81,6 +81,7 @@ async def enhanced_check(url: str = Query(...)):
     result = await check_enhanced(url)
     return JSONResponse(content=result)
 
+
 @app.get("/malware/enhanced/")
 async def malware_enhanced_check(url: str = Query(...)):
     overall_start = time.time()
@@ -89,20 +90,52 @@ async def malware_enhanced_check(url: str = Query(...)):
     google_result, securelint_result = await asyncio.gather(google_task, securelint_task)
     
     score = google_result.get("score", 50)
-    if securelint_result.get("type") == "clean":
-        score += 5
-    elif securelint_result.get("type") in ["malware", "phishing"]:
-        score -= 25
+    
+    # ONLY use cloud_detection data, ignore main securelint type
+    cloud_detection_list = securelint_result.get("cloud_detection", [])
+    if cloud_detection_list:
+        for detection in cloud_detection_list:
+            detection_type = detection.get("type", "").lower()
+            detection_action = detection.get("action", "").lower()
+            
+            # Score adjustments based on cloud detection type only
+            if detection_type == "clean":
+                score += 5
+            elif detection_type in ["malware", "phishing"]:
+                score -= 30
+            elif detection_type == "suspicious":
+                score -= 15
+    
     score = max(0, min(100, score))
     
-    if score <= 30:
-        action, severity = "block", "critical"
-    elif score <= 45:
-        action, severity = "block", "high"
-    elif score <= 55:
-        action, severity = "warn", "medium"
-    else:
-        action, severity = "allow", "low"
+    # Determine action based ONLY on cloud detection action
+    action = None
+    severity = "low"
+    
+    if cloud_detection_list:
+        for detection in cloud_detection_list:
+            detection_action = detection.get("action", "").lower()
+            if detection_action == "block":
+                action = "block"
+                severity = "critical" if score <= 30 else "high"
+                break
+            elif detection_action == "warn" and action is None:
+                action = "warn"
+                severity = "medium"
+            elif detection_action == "allow" and action is None:
+                action = "allow"
+                severity = "low"
+    
+    # Fallback to score-based action if no cloud_detection action found
+    if not action:
+        if score <= 30:
+            action, severity = "block", "critical"
+        elif score <= 45:
+            action, severity = "block", "high"
+        elif score <= 55:
+            action, severity = "warn", "medium"
+        else:
+            action, severity = "allow", "low"
     
     total_time = int((time.time() - overall_start) * 1000)
     
@@ -117,6 +150,7 @@ async def malware_enhanced_check(url: str = Query(...)):
         "google": google_result,
         "securelint": securelint_result
     })
+
 
 @app.get("/super_fast/")
 async def super_fast_check(url: str = Query(...)):
