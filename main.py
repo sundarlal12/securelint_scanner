@@ -456,63 +456,70 @@ async def malware_enhanced_check(url: str = Query(...)):
     # Get cloud detection data
     cloud_detection_list = securelint_result.get("cloud_detection", [])
     
-    # IMPORTANT: Check if Google detected any threat
-    google_detected_threat = google_true_count > 0 or score <= 45
+    # Track additional deductions from cloud detection
+    cloud_deduction = 0
+    cloud_action = None
+    cloud_type = None
     
-    # Process cloud detection but with Google priority
-    if cloud_detection_list and not google_detected_threat:
-        # Only apply cloud detection adjustments if Google says it's safe
+    # Process cloud detection for additional score reduction
+    if cloud_detection_list:
         for detection in cloud_detection_list:
-            detection_type = detection.get("type", "").lower()
+            cloud_type = detection.get("type", "").lower()
+            cloud_action = detection.get("action", "").lower()
+            c_action = detection.get("cAction", "").lower()
             
-            if detection_type == "clean":
-                score += 5
-            elif detection_type in ["malware", "phishing"]:
-                score -= 30
-            elif detection_type == "suspicious":
-                score -= 15
+            # Additional score reduction based on cloud detection type
+            # This is IN ADDITION to Google's score
+            if cloud_type == "phishing" and cloud_action == "block":
+                cloud_deduction = 20  # Phishing is severe - reduce by 20
+            elif cloud_type == "malware" and cloud_action == "block":
+                cloud_deduction = 25  # Malware is most severe - reduce by 25
+            elif cloud_type == "suspicious" and cloud_action == "block":
+                cloud_deduction = 10  # Suspicious but not confirmed - reduce by 10
+            elif cloud_type == "suspicious" and cloud_action == "allow":
+                cloud_deduction = 0   # Suspicious but allowed - no reduction
+            elif cloud_type == "clean":
+                cloud_deduction = 0   # Clean - no reduction
+            else:
+                cloud_deduction = 5   # Default small reduction for other types
+    
+    # Apply cloud deduction to score
+    score = score - cloud_deduction
+    
+    # Also apply Google's true_count penalty (if Google detected multiple threats)
+    if google_true_count > 1:
+        score -= (google_true_count - 1) * 5  # Extra 5 points per additional threat
     
     score = max(0, min(100, score))
     
-    # Determine action - GOOGLE TAKES PRIORITY for security
+    # Determine final action (most severe wins)
     action = None
     severity = "low"
     
-    # FIRST: Check if Google detected a threat (score <= 45 or true_count > 0)
-    if google_detected_threat or score <= 45:
-        # Google says it's unsafe - BLOCK regardless of cloud detection
-        if score <= 30:
+    # Check if cloud detection wants to block
+    cloud_wants_block = cloud_action == "block"
+    google_wants_block = google_true_count > 0 or score <= 45
+    
+    if google_wants_block or cloud_wants_block:
+        # Both or one wants to block
+        if score <= 25:
             action, severity = "block", "critical"
         elif score <= 45:
             action, severity = "block", "high"
         else:
-            action, severity = "block", "high"  # Default block for any Google detection
+            action, severity = "block", "high"
+    elif cloud_action == "warn":
+        action, severity = "warn", "medium"
     else:
-        # Google says it's safe, now check cloud detection
-        if cloud_detection_list:
-            for detection in cloud_detection_list:
-                detection_action = detection.get("action", "").lower()
-                if detection_action == "block":
-                    action = "block"
-                    severity = "critical" if score <= 30 else "high"
-                    break
-                elif detection_action == "warn" and action is None:
-                    action = "warn"
-                    severity = "medium"
-                elif detection_action == "allow" and action is None:
-                    action = "allow"
-                    severity = "low"
-        
-        # Fallback to score-based action if no cloud action
-        if not action:
-            if score <= 30:
-                action, severity = "block", "critical"
-            elif score <= 45:
-                action, severity = "block", "high"
-            elif score <= 55:
-                action, severity = "warn", "medium"
-            else:
-                action, severity = "allow", "low"
+        # Neither wants to block
+        if score <= 30:
+            action, severity = "block", "critical"
+        elif score <= 45:
+            action, severity = "block", "high"
+        elif score <= 55:
+            action, severity = "warn", "medium"
+        else:
+            action, severity = "allow", "low"
     
     total_time = int((time.time() - overall_start) * 1000)
     
@@ -527,11 +534,14 @@ async def malware_enhanced_check(url: str = Query(...)):
         "google": google_result,
         "securelint": securelint_result,
         "decision_logic": {
-            "google_threat_detected": google_detected_threat,
-            "google_score": score,
-            "cloud_type": cloud_detection_list[0].get("type", "unknown") if cloud_detection_list else "none",
-            "cloud_action": cloud_detection_list[0].get("action", "unknown") if cloud_detection_list else "none",
-            "priority": "google_safe_browsing" if google_detected_threat else "cloud_detection"
+            "google_threat_detected": google_wants_block,
+            "google_score": google_result.get("score", 50),
+            "google_true_count": google_true_count,
+            "cloud_type": cloud_type,
+            "cloud_action": cloud_action,
+            "cloud_deduction": cloud_deduction,
+            "final_score_calculation": f"{google_result.get('score', 50)} - {cloud_deduction} = {score}",
+            "priority": "combined_threat_detection"
         }
     })
 
