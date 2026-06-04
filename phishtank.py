@@ -16,6 +16,7 @@ _HEADERS = {
     "Accept": "*/*",
     "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
     "Cache-Control": "no-cache",
+    "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
 }
 
 
