@@ -336,14 +336,14 @@ async def email_leak_batch(
 # ============ EXTENSION SCRAPER ENDPOINTS ============
 
 @app.get("/extension/{extension_id}")
-async def get_extension_info(extension_id: str):
+async def get_extension_info(extension_id: str, _auth=Depends(require_active_subscription)):
     result = await fetch_extension_details(extension_id)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return JSONResponse(content=result)
 
 @app.get("/extension/{extension_id}/basic")
-async def get_extension_basic(extension_id: str):
+async def get_extension_basic(extension_id: str, _auth=Depends(require_active_subscription)):
     start_time = time.time()
     main_url = f"https://chromewebstore.google.com/detail/{extension_id}"
     headers = {
@@ -393,7 +393,7 @@ async def get_extension_basic(extension_id: str):
         raise HTTPException(status_code=404, detail=f"Extension {extension_id} not found")
 
 @app.get("/extension/{extension_id}/privacy")
-async def get_extension_privacy(extension_id: str):
+async def get_extension_privacy(extension_id: str, _auth=Depends(require_active_subscription)):
     start_time = time.time()
     privacy_url = f"https://chromewebstore.google.com/detail/{extension_id}/privacy"
     headers = {
@@ -433,7 +433,7 @@ async def get_extension_privacy(extension_id: str):
         raise HTTPException(status_code=404, detail=f"Privacy info for {extension_id} not found")
 
 @app.get("/extension/{extension_id}/developer")
-async def get_extension_developer(extension_id: str):
+async def get_extension_developer(extension_id: str, _auth=Depends(require_active_subscription)):
     start_time = time.time()
     main_url = f"https://chromewebstore.google.com/detail/{extension_id}"
     headers = {
@@ -496,7 +496,7 @@ async def get_extension_developer(extension_id: str):
         raise HTTPException(status_code=404, detail=f"Developer info for {extension_id} not found")
 
 @app.post("/extensions/batch")
-async def get_multiple_extensions(ids: dict):
+async def get_multiple_extensions(ids: dict, _auth=Depends(require_active_subscription)):
     import concurrent.futures
     
     start_time = time.time()
