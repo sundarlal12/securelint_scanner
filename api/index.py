@@ -19,6 +19,7 @@ try:
     from domain_age import check_domain_age
     from enhanced import check_enhanced, check_super_fast
     from extension_scraper import fetch_extension_details
+    from blacklist import is_domain_blacklisted, build_blacklisted_response
 except ImportError as e:
     print(f"Import warning: {e}")
     # Fallback for missing modules
@@ -42,6 +43,12 @@ except ImportError as e:
     
     async def fetch_extension_details(extension_id):
         return {"error": "Extension scraper not available"}
+
+    async def is_domain_blacklisted(url):
+        return False, ""
+
+    def build_blacklisted_response(url, domain, elapsed_ms):
+        return {"url": url, "score": 52, "action": "warn", "severity": "medium", "blacklisted": True}
 
 app = FastAPI(title="securelint API + Extension Scraper + Email Leak Check")
 
@@ -67,6 +74,10 @@ async def google_check(url: str = Query(...)):
 
 @app.get("/malware/")
 async def malware_check(url: str = Query(...)):
+    start = time.time()
+    blacklisted, domain = await is_domain_blacklisted(url)
+    if blacklisted:
+        return JSONResponse(content=build_blacklisted_response(url, domain, int((time.time() - start) * 1000)))
     result = await check_malware(url)
     return JSONResponse(content=result)
 
@@ -83,6 +94,11 @@ async def enhanced_check(url: str = Query(...)):
 @app.get("/malware/enhanced/")
 async def malware_enhanced_check(url: str = Query(...)):
     overall_start = time.time()
+
+    blacklisted, domain = await is_domain_blacklisted(url)
+    if blacklisted:
+        return JSONResponse(content=build_blacklisted_response(url, domain, int((time.time() - overall_start) * 1000)))
+
     google_task = asyncio.create_task(check_google_safe_browsing(url))
     securelint_task = asyncio.create_task(check_malware(url))
     google_result, securelint_result = await asyncio.gather(google_task, securelint_task)

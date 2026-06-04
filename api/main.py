@@ -9,21 +9,6 @@ import re
 import requests
 import json
 import os
-import httpx
-import asyncio
-import time
-import re
-import requests
-import json
-import os
-import ssl
-import socket
-import hashlib
-from bs4 import BeautifulSoup
-from datetime import datetime
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from bs4 import BeautifulSoup
 
 # Import custom modules with proper error handling for Vercel
@@ -58,7 +43,7 @@ except ImportError as e:
     async def fetch_extension_details(extension_id):
         return {"error": "Extension scraper not available"}
 
-app = FastAPI(title="securelint API + Extension Scraper + Email Leak Check")
+app = FastAPI(title="Fortect API + Extension Scraper + Email Leak Check")
 
 # ============ CONFIGURATION ============
 
@@ -96,423 +81,28 @@ async def enhanced_check(url: str = Query(...)):
     result = await check_enhanced(url)
     return JSONResponse(content=result)
 
-
-
-# @app.get("/ssl/")
-# async def ssl_check(url: str = Query(..., description="Domain or URL to check SSL certificate")):
-#     """
-#     Check SSL certificate details for a given domain.
-#     Usage: /ssl/?url=google.com
-#     """
-#     start_time = time.time()
-    
-#     # Extract hostname from URL if full URL is provided
-#     hostname = url
-#     if url.startswith(("http://", "https://")):
-#         from urllib.parse import urlparse
-#         parsed = urlparse(url)
-#         hostname = parsed.hostname
-    
-#     result = {
-#         "domain": hostname,
-#         "ssl": False,
-#         "response_time_ms": 0
-#     }
-    
-#     try:
-#         # SSL SOCKET
-#         context = ssl._create_unverified_context()
-        
-#         with socket.create_connection((hostname, 443), timeout=10) as sock:
-#             with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-#                 # RAW CERT
-#                 der_cert = ssock.getpeercert(True)
-                
-#                 # LOAD CERT
-#                 cert = x509.load_der_x509_certificate(der_cert, default_backend())
-                
-#                 # DATES
-#                 valid_from = cert.not_valid_before_utc
-#                 valid_until = cert.not_valid_after_utc
-#                 expired = valid_until < datetime.utcnow().astimezone()
-#                 days_left = (valid_until - datetime.utcnow().astimezone()).days
-                
-#                 # ISSUER
-#                 issuer = {}
-#                 for attr in cert.issuer:
-#                     issuer[attr.oid._name] = attr.value
-                
-#                 # SUBJECT
-#                 subject = {}
-#                 for attr in cert.subject:
-#                     subject[attr.oid._name] = attr.value
-                
-#                 # SIGNATURE ALGORITHM
-#                 signature_algorithm = cert.signature_hash_algorithm.name
-#                 weak_signature = signature_algorithm.lower() in ["md5", "sha1"]
-                
-#                 # PUBLIC KEY
-#                 public_key = cert.public_key()
-#                 public_key_bits = None
-#                 public_key_type = None
-                
-#                 if isinstance(public_key, rsa.RSAPublicKey):
-#                     public_key_bits = public_key.key_size
-#                     public_key_type = "RSA"
-#                 elif isinstance(public_key, ec.EllipticCurvePublicKey):
-#                     public_key_bits = public_key.key_size
-#                     public_key_type = "ECC"
-                
-#                 weak_key = (public_key_bits is not None and public_key_bits < 2048)
-                
-#                 # SELF SIGNED
-#                 self_signed = (cert.issuer == cert.subject)
-                
-#                 # WILDCARD
-#                 common_name = subject.get("commonName", "")
-#                 wildcard = "*" in common_name
-                
-#                 # TLS INFO
-#                 tls_version = ssock.version()
-#                 cipher = ssock.cipher()[0] if ssock.cipher() else None
-                
-#                 # FINGERPRINTS
-#                 sha1_fingerprint = hashlib.sha1(der_cert).hexdigest()
-#                 sha256_fingerprint = hashlib.sha256(der_cert).hexdigest()
-                
-#                 # HSTS
-#                 supports_hsts = False
-#                 hsts_header = ""
-#                 try:
-#                     response = requests.get(f"https://{hostname}", timeout=10, verify=False)
-#                     hsts_header = response.headers.get("Strict-Transport-Security", "")
-#                     supports_hsts = bool(hsts_header)
-#                 except:
-#                     pass
-                
-#                 response_time_ms = int((time.time() - start_time) * 1000)
-                
-#                 result = {
-#                     "domain": hostname,
-#                     "ssl": True,
-#                     "response_time_ms": response_time_ms,
-#                     "certificate_valid": not expired,
-#                     "expired": expired,
-#                     "days_left": days_left,
-#                     "valid_from": str(valid_from),
-#                     "valid_until": str(valid_until),
-#                     "issuer": issuer,
-#                     "subject": subject,
-#                     "serial_number": str(cert.serial_number),
-#                     "signature_algorithm": signature_algorithm,
-#                     "weak_signature": weak_signature,
-#                     "public_key_type": public_key_type,
-#                     "public_key_bits": public_key_bits,
-#                     "weak_key": weak_key,
-#                     "self_signed": self_signed,
-#                     "wildcard": wildcard,
-#                     "tls_version": tls_version,
-#                     "cipher": cipher,
-#                     "sha1_fingerprint": sha1_fingerprint,
-#                     "sha256_fingerprint": sha256_fingerprint,
-#                     "supports_hsts": supports_hsts,
-#                     "hsts_header": hsts_header
-#                 }
-                
-#     except socket.timeout:
-#         result["error"] = f"Connection timeout for {hostname}:443"
-#         result["response_time_ms"] = int((time.time() - start_time) * 1000)
-#     except ConnectionRefusedError:
-#         result["error"] = f"Connection refused - No SSL service running on {hostname}:443"
-#         result["response_time_ms"] = int((time.time() - start_time) * 1000)
-#     except ssl.SSLError as e:
-#         result["error"] = f"SSL error: {str(e)}"
-#         result["response_time_ms"] = int((time.time() - start_time) * 1000)
-#     except Exception as e:
-#         result["error"] = str(e)
-#         result["response_time_ms"] = int((time.time() - start_time) * 1000)
-    
-#     return JSONResponse(content=result)
-
-
-@app.get("/ssl/")
-async def ssl_check(url: str = Query(..., description="Domain or URL to check SSL certificate")):
-    """
-    Optimized SSL check - includes fingerprints but fast.
-    """
-    start_time = time.time()
-    
-    # Extract hostname
-    hostname = url
-    if url.startswith(("http://", "https://")):
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        hostname = parsed.hostname
-    
-    if not hostname or hostname == "None":
-        return JSONResponse(content={
-            "domain": hostname,
-            "ssl": False,
-            "error": "Invalid domain name",
-            "response_time_ms": int((time.time() - start_time) * 1000)
-        })
-    
-    result = {
-        "domain": hostname,
-        "ssl": False,
-        "response_time_ms": 0
-    }
-    
-    try:
-        # Use faster SSL context
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        
-        with socket.create_connection((hostname, 443), timeout=5) as sock:
-            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                der_cert = ssock.getpeercert(True)
-                cert = x509.load_der_x509_certificate(der_cert, default_backend())
-                
-                # DATES
-                valid_from = cert.not_valid_before_utc
-                valid_until = cert.not_valid_after_utc
-                expired = valid_until < datetime.utcnow().astimezone()
-                days_left = (valid_until - datetime.utcnow().astimezone()).days
-                
-                # ISSUER & SUBJECT (fast extraction)
-                issuer = {}
-                for attr in cert.issuer:
-                    issuer[attr.oid._name] = attr.value
-                
-                subject = {}
-                for attr in cert.subject:
-                    subject[attr.oid._name] = attr.value
-                
-                # SIGNATURE ALGORITHM
-                signature_algorithm = cert.signature_hash_algorithm.name
-                weak_signature = signature_algorithm.lower() in ["md5", "sha1"]
-                
-                # PUBLIC KEY
-                public_key = cert.public_key()
-                public_key_bits = None
-                public_key_type = None
-                
-                if isinstance(public_key, rsa.RSAPublicKey):
-                    public_key_bits = public_key.key_size
-                    public_key_type = "RSA"
-                elif isinstance(public_key, ec.EllipticCurvePublicKey):
-                    public_key_bits = public_key.key_size
-                    public_key_type = "ECC"
-                
-                weak_key = (public_key_bits is not None and public_key_bits < 2048)
-                
-                # SELF SIGNED & WILDCARD
-                self_signed = (cert.issuer == cert.subject)
-                common_name = subject.get("commonName", "")
-                wildcard = "*" in common_name
-                
-                # TLS INFO (fast)
-                tls_version = ssock.version()
-                cipher = ssock.cipher()[0] if ssock.cipher() else None
-                
-                # FINGERPRINTS (fast hashing - milliseconds)
-                sha1_fingerprint = hashlib.sha1(der_cert).hexdigest()
-                sha256_fingerprint = hashlib.sha256(der_cert).hexdigest()
-                
-                # REMOVED SLOW HSTS CHECK - saves 2-3 seconds
-                
-                response_time_ms = int((time.time() - start_time) * 1000)
-                
-                result = {
-                    "domain": hostname,
-                    "ssl": True,
-                    "response_time_ms": response_time_ms,
-                    "certificate_valid": not expired,
-                    "expired": expired,
-                    "days_left": days_left,
-                    "valid_from": str(valid_from),
-                    "valid_until": str(valid_until),
-                    "issuer": issuer,
-                    "subject": subject,
-                    "serial_number": str(cert.serial_number),
-                    "signature_algorithm": signature_algorithm,
-                    "weak_signature": weak_signature,
-                    "public_key_type": public_key_type,
-                    "public_key_bits": public_key_bits,
-                    "weak_key": weak_key,
-                    "self_signed": self_signed,
-                    "wildcard": wildcard,
-                    "tls_version": tls_version,
-                    "cipher": cipher,
-                    "sha1_fingerprint": sha1_fingerprint,
-                    "sha256_fingerprint": sha256_fingerprint
-                }
-                
-    except socket.timeout:
-        result["error"] = f"Connection timeout for {hostname}:443"
-        result["response_time_ms"] = int((time.time() - start_time) * 1000)
-    except ConnectionRefusedError:
-        result["error"] = f"Connection refused - No SSL service running on {hostname}:443"
-        result["response_time_ms"] = int((time.time() - start_time) * 1000)
-    except ssl.SSLError as e:
-        result["error"] = f"SSL error: {str(e)}"
-        result["response_time_ms"] = int((time.time() - start_time) * 1000)
-    except Exception as e:
-        result["error"] = str(e)
-        result["response_time_ms"] = int((time.time() - start_time) * 1000)
-    
-    return JSONResponse(content=result)
-
-# @app.get("/malware/enhanced/")
-# async def malware_enhanced_check(url: str = Query(...)):
-#     overall_start = time.time()
-#     google_task = asyncio.create_task(check_google_safe_browsing(url))
-#     securelint_task = asyncio.create_task(check_malware(url))
-#     google_result, securelint_result = await asyncio.gather(google_task, securelint_task)
-    
-#     score = google_result.get("score", 50)
-    
-#     # ONLY use cloud_detection data, ignore main securelint type
-#     cloud_detection_list = securelint_result.get("cloud_detection", [])
-#     if cloud_detection_list:
-#         for detection in cloud_detection_list:
-#             detection_type = detection.get("type", "").lower()
-#             detection_action = detection.get("action", "").lower()
-            
-#             # Score adjustments based on cloud detection type only
-#             if detection_type == "clean":
-#                 score += 5
-#             elif detection_type in ["malware", "phishing"]:
-#                 score -= 30
-#             elif detection_type == "suspicious":
-#                 score -= 15
-    
-#     score = max(0, min(100, score))
-    
-#     # Determine action based ONLY on cloud detection action
-#     action = None
-#     severity = "low"
-    
-#     if cloud_detection_list:
-#         for detection in cloud_detection_list:
-#             detection_action = detection.get("action", "").lower()
-#             if detection_action == "block":
-#                 action = "block"
-#                 severity = "critical" if score <= 30 else "high"
-#                 break
-#             elif detection_action == "warn" and action is None:
-#                 action = "warn"
-#                 severity = "medium"
-#             elif detection_action == "allow" and action is None:
-#                 action = "allow"
-#                 severity = "low"
-    
-#     # Fallback to score-based action if no cloud_detection action found
-#     if not action:
-#         if score <= 30:
-#             action, severity = "block", "critical"
-#         elif score <= 45:
-#             action, severity = "block", "high"
-#         elif score <= 55:
-#             action, severity = "warn", "medium"
-#         else:
-#             action, severity = "allow", "low"
-    
-#     total_time = int((time.time() - overall_start) * 1000)
-    
-#     return JSONResponse(content={
-#         "url": url,
-#         "total_time_ms": total_time,
-#         "score": score,
-#         "action": action,
-#         "severity": severity,
-#         "google_time_ms": google_result.get("time_ms", 0),
-#         "securelint_time_ms": securelint_result.get("time_ms", 0),
-#         "google": google_result,
-#         "securelint": securelint_result
-#     })
-
-
 @app.get("/malware/enhanced/")
 async def malware_enhanced_check(url: str = Query(...)):
     overall_start = time.time()
-    
-    # Ensure URL is properly formatted
-    if not url or url == "None":
-        return JSONResponse(content={"error": "Invalid URL"}, status_code=400)
-    
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-    
     google_task = asyncio.create_task(check_google_safe_browsing(url))
-    securelint_task = asyncio.create_task(check_malware(url))
-    google_result, securelint_result = await asyncio.gather(google_task, securelint_task)
+    fortect_task = asyncio.create_task(check_malware(url))
+    google_result, fortect_result = await asyncio.gather(google_task, fortect_task)
     
-    # Start with Google score
     score = google_result.get("score", 50)
-    google_true_count = google_result.get("true_count", 0)
-    
-    # Get cloud detection data
-    cloud_detection_list = securelint_result.get("cloud_detection", [])
-    
-    # IMPORTANT: Check if Google detected any threat
-    google_detected_threat = google_true_count > 0 or score <= 45
-    
-    # Process cloud detection but with Google priority
-    if cloud_detection_list and not google_detected_threat:
-        # Only apply cloud detection adjustments if Google says it's safe
-        for detection in cloud_detection_list:
-            detection_type = detection.get("type", "").lower()
-            
-            if detection_type == "clean":
-                score += 5
-            elif detection_type in ["malware", "phishing"]:
-                score -= 30
-            elif detection_type == "suspicious":
-                score -= 15
-    
+    if fortect_result.get("type") == "clean":
+        score += 5
+    elif fortect_result.get("type") in ["malware", "phishing"]:
+        score -= 25
     score = max(0, min(100, score))
     
-    # Determine action - GOOGLE TAKES PRIORITY for security
-    action = None
-    severity = "low"
-    
-    # FIRST: Check if Google detected a threat (score <= 45 or true_count > 0)
-    if google_detected_threat or score <= 45:
-        # Google says it's unsafe - BLOCK regardless of cloud detection
-        if score <= 30:
-            action, severity = "block", "critical"
-        elif score <= 45:
-            action, severity = "block", "high"
-        else:
-            action, severity = "block", "high"  # Default block for any Google detection
+    if score <= 30:
+        action, severity = "block", "critical"
+    elif score <= 45:
+        action, severity = "block", "high"
+    elif score <= 55:
+        action, severity = "warn", "medium"
     else:
-        # Google says it's safe, now check cloud detection
-        if cloud_detection_list:
-            for detection in cloud_detection_list:
-                detection_action = detection.get("action", "").lower()
-                if detection_action == "block":
-                    action = "block"
-                    severity = "critical" if score <= 30 else "high"
-                    break
-                elif detection_action == "warn" and action is None:
-                    action = "warn"
-                    severity = "medium"
-                elif detection_action == "allow" and action is None:
-                    action = "allow"
-                    severity = "low"
-        
-        # Fallback to score-based action if no cloud action
-        if not action:
-            if score <= 30:
-                action, severity = "block", "critical"
-            elif score <= 45:
-                action, severity = "block", "high"
-            elif score <= 55:
-                action, severity = "warn", "medium"
-            else:
-                action, severity = "allow", "low"
+        action, severity = "allow", "low"
     
     total_time = int((time.time() - overall_start) * 1000)
     
@@ -523,16 +113,9 @@ async def malware_enhanced_check(url: str = Query(...)):
         "action": action,
         "severity": severity,
         "google_time_ms": google_result.get("time_ms", 0),
-        "securelint_time_ms": securelint_result.get("time_ms", 0),
+        "fortect_time_ms": fortect_result.get("time_ms", 0),
         "google": google_result,
-        "securelint": securelint_result,
-        "decision_logic": {
-            "google_threat_detected": google_detected_threat,
-            "google_score": score,
-            "cloud_type": cloud_detection_list[0].get("type", "unknown") if cloud_detection_list else "none",
-            "cloud_action": cloud_detection_list[0].get("action", "unknown") if cloud_detection_list else "none",
-            "priority": "google_safe_browsing" if google_detected_threat else "cloud_detection"
-        }
+        "fortect": fortect_result
     })
 
 @app.get("/super_fast/")
@@ -893,7 +476,7 @@ async def proxy(request: dict):
 if __name__ == "__main__":
     import uvicorn
     print("\n" + "="*70)
-    print("🚀 securelint API - RUNNING LOCALLY")
+    print("🚀 FORTECT API - RUNNING LOCALLY")
     print("="*70)
     print("\n📧 Email Leak Check: /email-leak/?email=test@example.com")
     print("="*70 + "\n")

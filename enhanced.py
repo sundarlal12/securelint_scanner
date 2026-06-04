@@ -4,6 +4,7 @@ import time
 from gsr import check_google_safe_browsing
 from malware import check_malware
 from domain_age import check_domain_age
+from blacklist import is_domain_blacklisted, build_blacklisted_response, BLACKLIST_SCORE
 
 def calculate_score_from_cloud_detection(cloud_detection_list):
     """
@@ -41,9 +42,13 @@ def calculate_score_from_cloud_detection(cloud_detection_list):
     return score_adjustment, final_action
 
 async def check_enhanced(url: str, securelint_data=None):
-    """2 checks in parallel (Google + Malware)"""
+    """2 checks in parallel (Google + Malware), with blacklist pre-check."""
     overall_start = time.time()
-    
+
+    blacklisted, domain = await is_domain_blacklisted(url)
+    if blacklisted:
+        return build_blacklisted_response(url, domain, int((time.time() - overall_start) * 1000))
+
     google_task = asyncio.create_task(check_google_safe_browsing(url))
     malware_task = asyncio.create_task(check_malware(url))
     
@@ -111,9 +116,13 @@ async def check_enhanced(url: str, securelint_data=None):
     return result
 
 async def check_super_fast(url: str, securelint_data=None):
-    """ALL 3 checks in parallel (Google + Malware + Domain Age)"""
+    """ALL 3 checks in parallel (Google + Malware + Domain Age), with blacklist pre-check."""
     overall_start = time.time()
-    
+
+    blacklisted, domain = await is_domain_blacklisted(url)
+    if blacklisted:
+        return build_blacklisted_response(url, domain, int((time.time() - overall_start) * 1000))
+
     google_task = asyncio.create_task(check_google_safe_browsing(url))
     malware_task = asyncio.create_task(check_malware(url))
     domain_task = asyncio.create_task(check_domain_age(url))
