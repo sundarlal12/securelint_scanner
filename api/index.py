@@ -19,7 +19,7 @@ try:
     from domain_age import check_domain_age
     from enhanced import check_enhanced, check_super_fast
     from extension_scraper import fetch_extension_details
-    from blacklist import is_domain_blacklisted, build_blacklisted_response
+    from blacklist import is_domain_blacklisted, build_blacklisted_response, debug_blacklist_check
 except ImportError as e:
     print(f"Import warning: {e}")
     # Fallback for missing modules
@@ -50,6 +50,9 @@ except ImportError as e:
     def build_blacklisted_response(url, domain, elapsed_ms):
         return {"url": url, "score": 52, "action": "warn", "severity": "medium", "blacklisted": True}
 
+    async def debug_blacklist_check(url):
+        return {"error": "blacklist module not available"}
+
 app = FastAPI(title="securelint API + Extension Scraper + Email Leak Check")
 
 # ============ CONFIGURATION ============
@@ -66,6 +69,11 @@ async def root():
         "version": "2.2.0"
         
     }
+
+@app.get("/debug/blacklist/")
+async def debug_blacklist(url: str = Query(...)):
+    result = await debug_blacklist_check(url)
+    return JSONResponse(content=result)
 
 @app.get("/gsrcheck/")
 async def google_check(url: str = Query(...)):
