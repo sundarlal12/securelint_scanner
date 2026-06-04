@@ -21,6 +21,7 @@ try:
     from enhanced import check_enhanced, check_super_fast
     from extension_scraper import fetch_extension_details
     from blacklist import is_domain_blacklisted, build_blacklisted_response
+    from phishtank import check_phishtank
 except ImportError as e:
     print(f"Import warning: {e}")
     # Fallback for missing modules
@@ -51,6 +52,8 @@ except ImportError as e:
     def build_blacklisted_response(url, domain, elapsed_ms):
         return {"url": url, "score": 52, "action": "warn", "severity": "medium", "blacklisted": True}
 
+    async def check_phishtank(url):
+        return {"score_deduction": 0, "is_phish": False, "in_database": False, "time_ms": 0}
 
 app = FastAPI(title="securelint API + Extension Scraper + Email Leak Check")
 
@@ -103,16 +106,23 @@ async def malware_enhanced_check(url: str = Query(...), _auth=Depends(require_ac
 
     google_task = asyncio.create_task(check_google_safe_browsing(url))
     securelint_task = asyncio.create_task(check_malware(url))
-    google_result, securelint_result = await asyncio.gather(google_task, securelint_task)
-    
+    phishtank_task = asyncio.create_task(check_phishtank(url))
+    google_result, securelint_result, tankphish_result = await asyncio.gather(
+        google_task, securelint_task, phishtank_task
+    )
+
     score = google_result.get("score", 50)
 
+    # Cloud detection score adjustment
     cloud_detection_list = securelint_result.get("cloud_detection", [])
     for detection in cloud_detection_list:
         detection_type = detection.get("type", "").lower()
         detection_action = detection.get("action", "").lower()
         if detection_type in ["malware", "phishing"] and detection_action == "block":
             score -= 10
+
+    # PhishTank deduction (-5 only when confirmed phish: in_database+verified+valid)
+    score -= tankphish_result.get("score_deduction", 0)
 
     score = max(0, min(100, score))
 
@@ -142,9 +152,9 @@ async def malware_enhanced_check(url: str = Query(...), _auth=Depends(require_ac
             action, severity = "warn", "medium"
         else:
             action, severity = "allow", "low"
-    
+
     total_time = int((time.time() - overall_start) * 1000)
-    
+
     return JSONResponse(content={
         "url": url,
         "total_time_ms": total_time,
@@ -153,8 +163,10 @@ async def malware_enhanced_check(url: str = Query(...), _auth=Depends(require_ac
         "severity": severity,
         "google_time_ms": google_result.get("time_ms", 0),
         "securelint_time_ms": securelint_result.get("time_ms", 0),
+        "phishtank_time_ms": tankphish_result.get("time_ms", 0),
         "google": google_result,
-        "securelint": securelint_result
+        "securelint": securelint_result,
+        "tankphish": tankphish_result,
     })
 
 @app.get("/super_fast/")
