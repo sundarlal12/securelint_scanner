@@ -30,7 +30,7 @@ def extract_domain(url: str) -> str:
 
 async def is_domain_blacklisted(url: str) -> tuple[bool, str]:
     """
-    Check Supabase scanner_blacklist_domains table for status=1.
+    Check scanner_blacklist_domains table for status=1.
     Returns (is_blacklisted: bool, domain: str).
     """
     domain = extract_domain(url)
@@ -38,7 +38,7 @@ async def is_domain_blacklisted(url: str) -> tuple[bool, str]:
         return False, domain
 
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-        print(f"[blacklist] WARN: Supabase env vars missing. SUPABASE_URL={SUPABASE_URL!r}")
+        print(f"[blacklist] WARN: DB env vars missing. URL={SUPABASE_URL!r}")
         return False, domain
 
     endpoint = (
@@ -64,58 +64,6 @@ async def is_domain_blacklisted(url: str) -> tuple[bool, str]:
         return False, domain
 
 
-async def debug_blacklist_check(url: str) -> dict:
-    """
-    Returns a full diagnostic dict showing every step of the blacklist check.
-    Call via GET /debug/blacklist/?url=...
-    """
-    domain = extract_domain(url)
-    result = {
-        "url": url,
-        "extracted_domain": domain,
-        "supabase_url": SUPABASE_URL,
-        "supabase_key_set": bool(SUPABASE_ANON_KEY),
-        "env_file_path": str(_env_path),
-        "env_file_exists": _env_path.exists(),
-        "supabase_status_code": None,
-        "supabase_raw_response": None,
-        "supabase_error": None,
-        "is_blacklisted": False,
-    }
-
-    if not domain:
-        result["supabase_error"] = "Could not extract domain from URL"
-        return result
-
-    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-        result["supabase_error"] = "Supabase env vars not set"
-        return result
-
-    endpoint = (
-        f"{SUPABASE_URL}/rest/v1/scanner_blacklist_domains"
-        f"?domain=eq.{domain}&status=eq.1&select=domain,status&limit=1"
-    )
-    result["supabase_endpoint"] = endpoint
-
-    headers = {
-        "apikey": SUPABASE_ANON_KEY,
-        "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
-        "Accept": "application/json",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            response = await client.get(endpoint, headers=headers)
-            result["supabase_status_code"] = response.status_code
-            result["supabase_raw_response"] = response.text
-            if response.status_code == 200:
-                data = response.json()
-                result["is_blacklisted"] = len(data) > 0
-                result["rows_found"] = len(data)
-    except Exception as e:
-        result["supabase_error"] = str(e)
-
-    return result
 
 
 def build_blacklisted_response(url: str, domain: str, elapsed_ms: int) -> dict:

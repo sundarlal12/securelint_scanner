@@ -34,10 +34,10 @@ def _decode_jwt_payload(token: str) -> dict:
 async def _check_subscription(user_id: str, user_token: str) -> dict:
     """
     Query user_subscriptions for an active pro/enterprise row.
-    Uses the user's own Bearer token so Supabase RLS enforces row-level access.
+    Uses the user's own Bearer token for row-level access enforcement.
     """
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-        return {"allowed": False, "reason": "Server configuration error — Supabase env vars missing"}
+        return {"allowed": False, "reason": "Server configuration error"}
 
     plans_filter = ",".join(ALLOWED_PLANS)
     endpoint = (
@@ -79,7 +79,7 @@ async def require_active_subscription(authorization: str = Header(default=None))
             detail={
                 "error": "missing_token",
                 "message": "Authorization token is required.",
-                "action": "Provide a valid Supabase auth token in the Authorization header (Bearer <token>).",
+                "action": "Provide a valid auth token in the Authorization header (Bearer <token>).",
             },
         )
 
