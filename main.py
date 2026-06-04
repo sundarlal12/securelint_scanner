@@ -9,7 +9,15 @@ import re
 import requests
 import json
 import os
+import ssl
+import socket
+import hashlib
+from datetime import datetime
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from auth import require_active_subscription
 
 # Import custom modules with proper error handling for Vercel
@@ -172,6 +180,94 @@ async def malware_enhanced_check(url: str = Query(...), _auth=Depends(require_ac
         "securelint": securelint_result,
         "tankphish": tankphish_result,
     })
+
+
+@app.get("/ssl/")
+async def ssl_check(url: str = Query(..., description="Domain or URL to check SSL certificate"), _auth=Depends(require_active_subscription)):
+    """Optimized SSL certificate check — returns cert details, fingerprints, TLS info."""
+    start_time = time.time()
+
+    hostname = url
+    if url.startswith(("http://", "https://")):
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+
+    if not hostname or hostname == "None":
+        return JSONResponse(content={
+            "domain": hostname, "ssl": False,
+            "error": "Invalid domain name",
+            "response_time_ms": int((time.time() - start_time) * 1000)
+        })
+
+    result = {"domain": hostname, "ssl": False, "response_time_ms": 0}
+
+    try:
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+
+        with socket.create_connection((hostname, 443), timeout=5) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                der_cert = ssock.getpeercert(True)
+                cert = x509.load_der_x509_certificate(der_cert, default_backend())
+
+                valid_from = cert.not_valid_before_utc
+                valid_until = cert.not_valid_after_utc
+                expired = valid_until < datetime.utcnow().astimezone()
+                days_left = (valid_until - datetime.utcnow().astimezone()).days
+
+                issuer = {attr.oid._name: attr.value for attr in cert.issuer}
+                subject = {attr.oid._name: attr.value for attr in cert.subject}
+
+                signature_algorithm = cert.signature_hash_algorithm.name
+                weak_signature = signature_algorithm.lower() in ["md5", "sha1"]
+
+                public_key = cert.public_key()
+                public_key_bits = public_key_type = None
+                if isinstance(public_key, rsa.RSAPublicKey):
+                    public_key_bits, public_key_type = public_key.key_size, "RSA"
+                elif isinstance(public_key, ec.EllipticCurvePublicKey):
+                    public_key_bits, public_key_type = public_key.key_size, "ECC"
+
+                result = {
+                    "domain": hostname,
+                    "ssl": True,
+                    "response_time_ms": int((time.time() - start_time) * 1000),
+                    "certificate_valid": not expired,
+                    "expired": expired,
+                    "days_left": days_left,
+                    "valid_from": str(valid_from),
+                    "valid_until": str(valid_until),
+                    "issuer": issuer,
+                    "subject": subject,
+                    "serial_number": str(cert.serial_number),
+                    "signature_algorithm": signature_algorithm,
+                    "weak_signature": weak_signature,
+                    "public_key_type": public_key_type,
+                    "public_key_bits": public_key_bits,
+                    "weak_key": (public_key_bits is not None and public_key_bits < 2048),
+                    "self_signed": (cert.issuer == cert.subject),
+                    "wildcard": "*" in subject.get("commonName", ""),
+                    "tls_version": ssock.version(),
+                    "cipher": ssock.cipher()[0] if ssock.cipher() else None,
+                    "sha1_fingerprint": hashlib.sha1(der_cert).hexdigest(),
+                    "sha256_fingerprint": hashlib.sha256(der_cert).hexdigest(),
+                }
+
+    except socket.timeout:
+        result["error"] = f"Connection timeout for {hostname}:443"
+        result["response_time_ms"] = int((time.time() - start_time) * 1000)
+    except ConnectionRefusedError:
+        result["error"] = f"Connection refused — no SSL on {hostname}:443"
+        result["response_time_ms"] = int((time.time() - start_time) * 1000)
+    except ssl.SSLError as e:
+        result["error"] = f"SSL error: {e}"
+        result["response_time_ms"] = int((time.time() - start_time) * 1000)
+    except Exception as e:
+        result["error"] = str(e)
+        result["response_time_ms"] = int((time.time() - start_time) * 1000)
+
+    return JSONResponse(content=result)
 
 
 @app.get("/super_fast/")
