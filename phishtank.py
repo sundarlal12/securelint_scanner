@@ -78,7 +78,7 @@ async def check_phishtank(url: str) -> dict:
                 "in_database": in_database,
                 "verified": verified,
                 "valid": valid,
-                "phish_id": results.get("phish_id"),
+                #"phish_id": results.get("phish_id"),
                 #"phish_detail_page": results.get("phish_detail_page"),
                 "verified_at": results.get("verified_at"),
                 "time_ms": int((time.time() - start) * 1000),
