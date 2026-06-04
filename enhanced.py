@@ -21,14 +21,8 @@ def calculate_score_from_cloud_detection(cloud_detection_list):
         detection_type = detection.get("type", "").lower()
         detection_action = detection.get("action", "").lower()
         
-        # Score adjustments based on type
-        if detection_type == "clean":
-            score_adjustment += 5
-        elif detection_type == "malware":
-            score_adjustment -= 30
-        elif detection_type == "phishing":
-            score_adjustment -= 30
-        elif detection_type == "suspicious":
+        # Score adjustment: malware/phishing only penalised when action=block
+        if detection_type in ["malware", "phishing"] and detection_action == "block":
             score_adjustment -= 15
         
         # Action-based overrides
@@ -55,50 +49,63 @@ async def check_enhanced(url: str, securelint_data=None):
     google_result, malware_result = await asyncio.gather(google_task, malware_task)
     
     score = google_result.get("score", 50)
-    
-    if malware_result.get("type") == "clean":
-        score += 5
-    elif malware_result.get("type") in ["malware", "phishing"]:
-        score -= 25
-    
-    # Add cloud detection scoring if data provided
+
+    # Score adjustment from malware result's cloud_detection
+    cloud_detection_list = malware_result.get("cloud_detection", [])
+    for detection in cloud_detection_list:
+        detection_type = detection.get("type", "").lower()
+        detection_action = detection.get("action", "").lower()
+        if detection_type in ["malware", "phishing"] and detection_action == "block":
+            score -= 15
+
+    # Additional adjustment from optional extra securelint_data
     if securelint_data:
-        cloud_adjustment, cloud_action = calculate_score_from_cloud_detection(
+        extra_adjustment, _ = calculate_score_from_cloud_detection(
             securelint_data.get("cloud_detection", [])
         )
-        score += cloud_adjustment
-    
+        score += extra_adjustment
+
     score = max(0, min(100, score))
-    
-    # Check if cloud action overrides
-    cloud_override_action = None
-    if securelint_data:
-        _, cloud_override_action = calculate_score_from_cloud_detection(
-            securelint_data.get("cloud_detection", [])
-        )
-    
-    if cloud_override_action:
-        action = cloud_override_action
-        if action == "block":
+
+    # Action driven by cloud_detection action field first
+    action = None
+    severity = "low"
+    for detection in cloud_detection_list:
+        det_action = detection.get("action", "").lower()
+        if det_action == "block":
+            action = "block"
             severity = "critical" if score <= 30 else "high"
-        elif action == "warn":
-            severity = "medium"
-        else:
-            severity = "low"
-    else:
-        if score <= 30:
-            action = "block"
-            severity = "critical"
-        elif score <= 45:
-            action = "block"
-            severity = "high"
-        elif score <= 55:
+            break
+        elif det_action == "warn" and action is None:
             action = "warn"
             severity = "medium"
-        else:
+        elif det_action == "allow" and action is None:
             action = "allow"
             severity = "low"
-    
+
+    # Also check extra securelint_data for action override
+    if securelint_data and not action:
+        _, extra_action = calculate_score_from_cloud_detection(
+            securelint_data.get("cloud_detection", [])
+        )
+        if extra_action:
+            action = extra_action
+            if action == "block":
+                severity = "critical" if score <= 30 else "high"
+            elif action == "warn":
+                severity = "medium"
+
+    # Fallback to score-based action when cloud_detection has no action
+    if not action:
+        if score <= 30:
+            action, severity = "block", "critical"
+        elif score <= 45:
+            action, severity = "block", "high"
+        elif score <= 55:
+            action, severity = "warn", "medium"
+        else:
+            action, severity = "allow", "low"
+
     result = {
         "url": url,
         "total_time_ms": int((time.time() - overall_start) * 1000),
@@ -108,11 +115,10 @@ async def check_enhanced(url: str, securelint_data=None):
         "google": google_result,
         "malware": malware_result
     }
-    
-    # Include cloud detection in result if provided
+
     if securelint_data:
         result["cloud_detection"] = securelint_data.get("cloud_detection", [])
-    
+
     return result
 
 async def check_super_fast(url: str, securelint_data=None):
@@ -132,50 +138,63 @@ async def check_super_fast(url: str, securelint_data=None):
     )
     
     score = google_result.get("score", 50)
-    
-    if malware_result.get("type") == "clean":
-        score += 5
-    elif malware_result.get("type") in ["malware", "phishing"]:
-        score -= 25
-    
-    # Add cloud detection scoring if data provided
+
+    # Score adjustment from malware result's cloud_detection
+    cloud_detection_list = malware_result.get("cloud_detection", [])
+    for detection in cloud_detection_list:
+        detection_type = detection.get("type", "").lower()
+        detection_action = detection.get("action", "").lower()
+        if detection_type in ["malware", "phishing"] and detection_action == "block":
+            score -= 15
+
+    # Additional adjustment from optional extra securelint_data
     if securelint_data:
-        cloud_adjustment, cloud_action = calculate_score_from_cloud_detection(
+        extra_adjustment, _ = calculate_score_from_cloud_detection(
             securelint_data.get("cloud_detection", [])
         )
-        score += cloud_adjustment
-    
+        score += extra_adjustment
+
     score = max(0, min(100, score))
-    
-    # Check if cloud action overrides
-    cloud_override_action = None
-    if securelint_data:
-        _, cloud_override_action = calculate_score_from_cloud_detection(
-            securelint_data.get("cloud_detection", [])
-        )
-    
-    if cloud_override_action:
-        action = cloud_override_action
-        if action == "block":
+
+    # Action driven by cloud_detection action field first
+    action = None
+    severity = "low"
+    for detection in cloud_detection_list:
+        det_action = detection.get("action", "").lower()
+        if det_action == "block":
+            action = "block"
             severity = "critical" if score <= 30 else "high"
-        elif action == "warn":
-            severity = "medium"
-        else:
-            severity = "low"
-    else:
-        if score <= 30:
-            action = "block"
-            severity = "critical"
-        elif score <= 45:
-            action = "block"
-            severity = "high"
-        elif score <= 55:
+            break
+        elif det_action == "warn" and action is None:
             action = "warn"
             severity = "medium"
-        else:
+        elif det_action == "allow" and action is None:
             action = "allow"
             severity = "low"
-    
+
+    # Also check extra securelint_data for action override
+    if securelint_data and not action:
+        _, extra_action = calculate_score_from_cloud_detection(
+            securelint_data.get("cloud_detection", [])
+        )
+        if extra_action:
+            action = extra_action
+            if action == "block":
+                severity = "critical" if score <= 30 else "high"
+            elif action == "warn":
+                severity = "medium"
+
+    # Fallback to score-based action when cloud_detection has no action
+    if not action:
+        if score <= 30:
+            action, severity = "block", "critical"
+        elif score <= 45:
+            action, severity = "block", "high"
+        elif score <= 55:
+            action, severity = "warn", "medium"
+        else:
+            action, severity = "allow", "low"
+
     result = {
         "url": url,
         "total_time_ms": int((time.time() - overall_start) * 1000),
@@ -186,9 +205,8 @@ async def check_super_fast(url: str, securelint_data=None):
         "malware": malware_result,
         "domain_age": domain_result
     }
-    
-    # Include cloud detection in result if provided
+
     if securelint_data:
         result["cloud_detection"] = securelint_data.get("cloud_detection", [])
-    
+
     return result

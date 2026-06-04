@@ -104,20 +104,42 @@ async def malware_enhanced_check(url: str = Query(...)):
     google_result, securelint_result = await asyncio.gather(google_task, securelint_task)
     
     score = google_result.get("score", 50)
-    if securelint_result.get("type") == "clean":
-        score += 5
-    elif securelint_result.get("type") in ["malware", "phishing"]:
-        score -= 25
+
+    cloud_detection_list = securelint_result.get("cloud_detection", [])
+    for detection in cloud_detection_list:
+        detection_type = detection.get("type", "").lower()
+        detection_action = detection.get("action", "").lower()
+        if detection_type in ["malware", "phishing"] and detection_action == "block":
+            score -= 15
+
     score = max(0, min(100, score))
-    
-    if score <= 30:
-        action, severity = "block", "critical"
-    elif score <= 45:
-        action, severity = "block", "high"
-    elif score <= 55:
-        action, severity = "warn", "medium"
-    else:
-        action, severity = "allow", "low"
+
+    # Action driven by cloud_detection action field first
+    action = None
+    severity = "low"
+    for detection in cloud_detection_list:
+        det_action = detection.get("action", "").lower()
+        if det_action == "block":
+            action = "block"
+            severity = "critical" if score <= 30 else "high"
+            break
+        elif det_action == "warn" and action is None:
+            action = "warn"
+            severity = "medium"
+        elif det_action == "allow" and action is None:
+            action = "allow"
+            severity = "low"
+
+    # Fallback to score-based action when cloud_detection is empty or missing
+    if not action:
+        if score <= 30:
+            action, severity = "block", "critical"
+        elif score <= 45:
+            action, severity = "block", "high"
+        elif score <= 55:
+            action, severity = "warn", "medium"
+        else:
+            action, severity = "allow", "low"
     
     total_time = int((time.time() - overall_start) * 1000)
     

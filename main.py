@@ -114,12 +114,8 @@ async def malware_enhanced_check(url: str = Query(...)):
             detection_type = detection.get("type", "").lower()
             detection_action = detection.get("action", "").lower()
             
-            # Score adjustments based on cloud detection type only
-            if detection_type == "clean":
-                score += 5
-            elif detection_type in ["malware", "phishing"]:
-                score -= 30
-            elif detection_type == "suspicious":
+            # Score adjustments: malware/phishing only penalised when action=block
+            if detection_type in ["malware", "phishing"] and detection_action == "block":
                 score -= 15
     
     score = max(0, min(100, score))
