@@ -1,6 +1,6 @@
 
 # main.py - COMPLETE WITH ALL ENDPOINTS + EMAIL LEAK CHECK (VERCEL READY)
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import httpx
 import asyncio
@@ -10,6 +10,7 @@ import requests
 import json
 import os
 from bs4 import BeautifulSoup
+from auth import require_active_subscription
 
 # Import custom modules with proper error handling for Vercel
 try:
@@ -19,7 +20,7 @@ try:
     from domain_age import check_domain_age
     from enhanced import check_enhanced, check_super_fast
     from extension_scraper import fetch_extension_details
-    from blacklist import is_domain_blacklisted, build_blacklisted_response, debug_blacklist_check
+    from blacklist import is_domain_blacklisted, build_blacklisted_response
 except ImportError as e:
     print(f"Import warning: {e}")
     # Fallback for missing modules
@@ -50,8 +51,6 @@ except ImportError as e:
     def build_blacklisted_response(url, domain, elapsed_ms):
         return {"url": url, "score": 52, "action": "warn", "severity": "medium", "blacklisted": True}
 
-    async def debug_blacklist_check(url):
-        return {"error": "blacklist module not available"}
 
 app = FastAPI(title="securelint API + Extension Scraper + Email Leak Check")
 
@@ -70,18 +69,13 @@ async def root():
         
     }
 
-@app.get("/debug/blacklist/")
-async def debug_blacklist(url: str = Query(...)):
-    result = await debug_blacklist_check(url)
-    return JSONResponse(content=result)
-
 @app.get("/gsrcheck/")
-async def google_check(url: str = Query(...)):
+async def google_check(url: str = Query(...), _auth=Depends(require_active_subscription)):
     result = await check_google_safe_browsing(url)
     return JSONResponse(content=result)
 
 @app.get("/malware/")
-async def malware_check(url: str = Query(...)):
+async def malware_check(url: str = Query(...), _auth=Depends(require_active_subscription)):
     start = time.time()
     blacklisted, domain = await is_domain_blacklisted(url)
     if blacklisted:
@@ -90,17 +84,17 @@ async def malware_check(url: str = Query(...)):
     return JSONResponse(content=result)
 
 @app.get("/domain_age/")
-async def domain_age_check(url: str = Query(...)):
+async def domain_age_check(url: str = Query(...), _auth=Depends(require_active_subscription)):
     result = await check_domain_age(url)
     return JSONResponse(content=result)
 
 @app.get("/enhanced/")
-async def enhanced_check(url: str = Query(...)):
+async def enhanced_check(url: str = Query(...), _auth=Depends(require_active_subscription)):
     result = await check_enhanced(url)
     return JSONResponse(content=result)
 
 @app.get("/malware/enhanced/")
-async def malware_enhanced_check(url: str = Query(...)):
+async def malware_enhanced_check(url: str = Query(...), _auth=Depends(require_active_subscription)):
     overall_start = time.time()
 
     blacklisted, domain = await is_domain_blacklisted(url)
@@ -164,7 +158,7 @@ async def malware_enhanced_check(url: str = Query(...)):
     })
 
 @app.get("/super_fast/")
-async def super_fast_check(url: str = Query(...)):
+async def super_fast_check(url: str = Query(...), _auth=Depends(require_active_subscription)):
     result = await check_super_fast(url)
     return JSONResponse(content=result)
 
