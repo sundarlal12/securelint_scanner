@@ -116,7 +116,7 @@ async def malware_enhanced_check(url: str = Query(...)):
             
             # Score adjustments: malware/phishing only penalised when action=block
             if detection_type in ["malware", "phishing"] and detection_action == "block":
-                score -= 15
+                score -= 10
     
     score = max(0, min(100, score))
     

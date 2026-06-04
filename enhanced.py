@@ -23,7 +23,7 @@ def calculate_score_from_cloud_detection(cloud_detection_list):
         
         # Score adjustment: malware/phishing only penalised when action=block
         if detection_type in ["malware", "phishing"] and detection_action == "block":
-            score_adjustment -= 15
+            score_adjustment -= 10
         
         # Action-based overrides
         if detection_action == "block" and final_action != "block":
@@ -56,7 +56,7 @@ async def check_enhanced(url: str, securelint_data=None):
         detection_type = detection.get("type", "").lower()
         detection_action = detection.get("action", "").lower()
         if detection_type in ["malware", "phishing"] and detection_action == "block":
-            score -= 15
+            score -= 10
 
     # Additional adjustment from optional extra securelint_data
     if securelint_data:
@@ -145,7 +145,7 @@ async def check_super_fast(url: str, securelint_data=None):
         detection_type = detection.get("type", "").lower()
         detection_action = detection.get("action", "").lower()
         if detection_type in ["malware", "phishing"] and detection_action == "block":
-            score -= 15
+            score -= 10
 
     # Additional adjustment from optional extra securelint_data
     if securelint_data:

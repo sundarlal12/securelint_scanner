@@ -110,7 +110,7 @@ async def malware_enhanced_check(url: str = Query(...)):
         detection_type = detection.get("type", "").lower()
         detection_action = detection.get("action", "").lower()
         if detection_type in ["malware", "phishing"] and detection_action == "block":
-            score -= 15
+            score -= 10
 
     score = max(0, min(100, score))
 
