@@ -276,7 +276,8 @@ async def super_fast_check(url: str = Query(...), _auth=Depends(require_active_s
 async def email_leak_check(
     email: str = Query(..., description="Email address to check for data leaks"),
     from_date: int = Query(1, description="Days to look back (default: 1)"),
-    wid: str = Query(None, description="Widget ID parameter")
+    wid: str = Query(None, description="Widget ID parameter"),
+    _auth=Depends(require_active_subscription)
 ):
     start_time = time.time()
     final_wid = wid if wid else WID
@@ -364,7 +365,8 @@ async def email_leak_check(
 async def email_leak_batch(
     request: dict,
     from_date: int = Query(1),
-    wid: str = Query(None)
+    wid: str = Query(None),
+    _auth=Depends(require_active_subscription)
 ):
     start_time = time.time()
     emails = request.get("emails", [])
@@ -614,7 +616,7 @@ async def get_multiple_extensions(ids: dict, _auth=Depends(require_active_subscr
     })
 
 @app.post("/v1/cloud")
-async def proxy(request: dict):
+async def proxy(request: dict, _auth=Depends(require_active_subscription)):
     async with httpx.AsyncClient() as client:
         response = await client.post(REAL_API_URL, json=request, headers=HEADERS)
     return JSONResponse(content=response.json())
